@@ -1,3 +1,10 @@
+core
+*~
+*.bak
+*.log
+*.orig
+*.rej
+
 # Prerequisites
 *.d
 
@@ -50,3 +57,29 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# Eclipse
+.project
+.cproject
+
+# Autotools
+/config.status
+Makefile.in
+Makefile
+
+# Travis CI created these files
+/aclocal.m4
+/autom4te.cache
+/compile
+/configure
+/depcomp
+/install-sh
+/missing
+/src/.deps
+/src/tor2web
+/src/*.gcda
+/src/*.gcno
+/tor2web-0.0-coverage.info
+/tor2web-0.0-coverage
+/*.c.gcov
+/test-driver

@@ -1,0 +1,7 @@
+generate_page(`Tor2web Error: Invalid Hostname',  `tor2web-content', `dnl
+        <h2 id="tor2web-title">Tor2web Error: Invalid Hostname</h2>
+        <p>Sorry, we couldn''`t serve the page you requested.</p>
+        <ol>
+          <li><p><strong>The entered URL is invalid.</strong> This most likely happens if you get this page immediately after trying to visit a URL. This service only works with valid <code>.onion</code> URLs. Please check your URL and try again.</p></li>
+        </ol>
+')dnl

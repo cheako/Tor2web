@@ -1,0 +1,4 @@
+    generate_page(`Tor2web Error: Generic Error (<t:transparent t:render="t2wvar-errorcode" />)',  `tor2web-content', `dnl
+        <h2 id="tor2web-title">Tor2web Error: Generic Error (<b><t:transparent t:render="t2wvar-errorcode" /></b>)</h2>
+        <p>Sorry, we couldn''`t serve the page you requested.</p>
+')dnl

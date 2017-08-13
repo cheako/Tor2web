@@ -1,0 +1,9 @@
+PROJECT_NAME           = "Ihlt Hopefully the Last Tracker"
+INPUT                  = src
+OUTPUT_DIRECTORY       = code_docs/ihlt
+CREATE_SUBDIRS         = YES
+OPTIMIZE_OUTPUT_FOR_C  = YES
+EXTRACT_ALL            = YES
+CASE_SENSE_NAMES       = YES
+SORT_BRIEF_DOCS        = YES
+GENERATE_LATEX         = NO

@@ -1,0 +1,5 @@
+generate_page(`Tor2web Error: Access Denied',  `tor2web-content', `dnl
+        <h2 id="tor2web-title">Tor2web Error: Access Denied to Specific Hidden Service Page</h2>
+        <p>Access to the following page been blocked.</p><br />
+        <p>It may happen that Tor2web maintainers have to block proxy access for certain explicit illegal contents in order to keep the network up and running. In such case you can still access the content directly by using Tor, that''`s because Tor2web just acts as a proxy server and the content is on a Tor Hidden Service.</p>
+')dnl

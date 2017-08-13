@@ -1,0 +1,4 @@
+generate_page(`Tor2web Error: Generic Sock Error',  `tor2web-content', `dnl
+        <h2 id="tor2web-title">Tor2web Error: Generic Sock Error</h2>
+        <p>Sorry, we couldn''`t serve the page you requested.</p>
+')dnl

@@ -1,0 +1,9 @@
+[submodule "inih"]
+	path = inih
+	url = https://github.com/benhoyt/inih
+[submodule "vector"]
+	path = vector
+	url = https://github.com/goldsborough/vector
+[submodule "t"]
+	path = t
+	url = https://github.com/cheako/tor2web-tests.git

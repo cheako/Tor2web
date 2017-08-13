@@ -1,0 +1,27 @@
+# Blacklist
+branches:
+  except:
+  - gh-pages
+
+services:
+- docker
+
+# Don't assume ruby.
+language: generic
+
+# Setup docker image
+before_install:
+- docker build -t tor2web .
+- printf 'export GH_REPO_REF=github.com/cheako/tor2web.git CID=%s\n' "`docker run -d tor2web /usr/local/bin/boot-debian-base`" | tee cid
+- . cid; docker exec $CID /bin/sh -c 'cd /usr/src/github/tor2web/t; bin/user-start.sh;'
+
+# Tested on libio-socket-socks-perl 0.73-1, earlier versions may not work.
+script:
+- . cid; docker exec -e TTW_TARGET=c $CID /bin/sh -c 'cd /usr/src/github/tor2web; make CFLAGS="-Wall" && make AM_COLOR_TESTS=always check-code-coverage'
+#- . cid; docker exec -e TTW_TARGET=c $CID /bin/sh -c 'cd /usr/src/github/tor2web/t; bin/user-start.sh; make CFLAGS="-Wall" && make AM_COLOR_TESTS=always check-code-coverage'
+#- . cid; docker exec -e TTW_TARGET=c -e TTW_STRACE="strace -f -s 200" $CID /bin/sh -c 'make -C /usr/src/github/tor2web CFLAGS="-Wall" && make -C /usr/src/github/tor2web AM_COLOR_TESTS=always check'
+#- . cid; docker exec -e TTW_TARGET=c -e TTW_STRACE=" " $CID //bin/sh -c 'make -C /usr/src/github/tor2web CFLAGS="-Wall" && make -C /usr/src/github/tor2web AM_COLOR_TESTS=always check-code-coverage'
+
+# Generate and deploy documentation
+after_success:
+- . cid; docker exec -e GH_REPO_TOKEN -e GH_REPO_NAME=tor2web -e GH_REPO_REF `./.codecov-env.sh` $CID /usr/src/github/tor2web/.after_success.sh
