@@ -28,13 +28,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-/*
- typedef enum
- {
- STATE_REQUEST_LINE, STATE_HEADERS, STATE_BODY,
- } state_t;
- */
-
 typedef struct httpsd
 {
   struct sockaddr_storage addr;
@@ -101,7 +94,7 @@ httpsd_new (tlssession_h tls, struct sockaddr *addr, socklen_t alen)
   memcpy (&h->addr, addr, alen);
   *h = (httpsd_t
 	)
-	  { .alen = alen, .http_request.tls = tls, .sendbuf = NULL, .lover =
+	  { .alen = alen, .tls = tls, .sendbuf = NULL, .lover =
 	  NULL, .http = NULL, .request_line_clip = NULL, .tls = tls,
 	      .http_close = false, };
   new_request (h);
@@ -158,12 +151,6 @@ bool *done)
 			    strspn (
 				hstart + regmatch.rm_so,
 				"qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM1234567890._-"));
-		  h->http = http_new (hstart + regmatch.rm_so,
-				      regmatch.rm_eo - regmatch.rm_so,
-				      h->http_request,
-				      get_sendbuf_buf (h->sendbuf),
-				      get_sendbuf_size (h->sendbuf));
-		  sendbuf_clear (&h->sendbuf);
 		}
 	    }
 	  else if (reti != REG_NOMATCH)
@@ -261,8 +248,6 @@ process_func (void *c, const void *v, size_t s)
   unsigned short hlen = 0;
   size_t ret = 0;
   bool done = false;
-  // TODO: This screams of off-by-one errors.
-  // Make sure to write many test cases.
   if (!h->have_request_line)
     ret += process_request_line (h, &d, s, &done);
   if (done)
@@ -306,12 +291,6 @@ process_func (void *c, const void *v, size_t s)
 				    strspn (
 					dstart + regmatch.rm_so,
 					"qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM1234567890._-"));
-			  h->http = http_new (dstart + regmatch.rm_so,
-					      regmatch.rm_eo - regmatch.rm_so,
-					      h->http_request,
-					      get_sendbuf_buf (h->sendbuf),
-					      get_sendbuf_size (h->sendbuf));
-			  sendbuf_clear (&h->sendbuf);
 			}
 		    }
 		  else if (reti != REG_NOMATCH)
@@ -357,8 +336,14 @@ process_func (void *c, const void *v, size_t s)
 	{
 	  // TODO: This is the last header.
 	  h->have_eoh = true;
-	  http_request_update (h->http, h->http_request);
+	  h->http_request.output = (response_t
+		)
+		  { .next = NULL, .tls = h->tls, .eof = false, .sendbuf =
+		  NULL, };
 	  write_http (h, one_byte ? "\n" : "\r\n", one_byte ? 1 : 2);
+	  h->http = http_new (h->http_request, get_sendbuf_buf (h->sendbuf),
+			      get_sendbuf_size (h->sendbuf));
+	  sendbuf_clear (&h->sendbuf);
 	  d += one_byte ? 1 : 2;
 	  ret += one_byte ? 1 : 2;
 	}

@@ -130,6 +130,7 @@ typedef struct http
   bool have_connect;
   bool have_socks_connect;
   bool have_status_line;
+  bool is_html;
   bool have_eoh;
   size_t body_length;
   bool chunked;
@@ -246,7 +247,8 @@ responce_end (http_h h)
 	free (request->hostname);
       if (NULL != request->retrybuf)
 	free (request->retrybuf);
-      gnutls_b_ctra (request->tls);
+      request->output.eof = true;
+      response_send (&request->output, NULL, 0);
       vector_pop_front (&h->request_v);
     }
 }
@@ -268,14 +270,15 @@ process_status_line (http_h h, http_request_t *request, const char **d,
       return 0;
     }
   h->have_status_line = true;
-  gnutls_send (request->tls, *d, len);
+  response_send (&request->output, *d, len);
   ret += len;
   *d += len;
   if ((s > ret && (one_byte = ('\n' == (*d)[0])))
       || (s > ret + 1 && '\r' == (*d)[0] && '\n' == (*d)[1]))
     {
       // TODO: No headers.
-      gnutls_send (request->tls, one_byte ? "\n" : "\r\n", one_byte ? 1 : 2);
+      response_send (&request->output, one_byte ? "\n" : "\r\n",
+		     one_byte ? 1 : 2);
       *d += one_byte ? 1 : 2;
       ret += one_byte ? 1 : 2;
       // This automatically means no body, so the response is done.
@@ -292,7 +295,7 @@ process_status_line (http_h h, http_request_t *request, const char **d,
 }
 
 static inline void
-clip_domain_from_cookie (tlssession_h tls, const char *hstart, size_t hlen)
+clip_domain_from_cookie (response_h output, const char *hstart, size_t hlen)
 {
   int reti;
   regmatch_t regmatch;
@@ -301,10 +304,11 @@ clip_domain_from_cookie (tlssession_h tls, const char *hstart, size_t hlen)
     {
       if (hlen > regmatch.rm_so)
 	{
-	  gnutls_send (tls, hstart, regmatch.rm_so);
+	  response_send (output, hstart, regmatch.rm_so);
 	  // Should be a \n at least.
 	  assert(hlen > regmatch.rm_eo);
-	  gnutls_send (tls, hstart + regmatch.rm_eo, hlen - regmatch.rm_eo);
+	  response_send (output, hstart + regmatch.rm_eo,
+			 hlen - regmatch.rm_eo);
 	}
       else
 	{
@@ -312,7 +316,7 @@ clip_domain_from_cookie (tlssession_h tls, const char *hstart, size_t hlen)
 	  fprintf ( stderr, "%s %zu, at %d.  In: <<EOR\n%s\nEOR",
 		   "Regex domain_av start past end of header", hlen,
 		   regmatch.rm_so, hstart);
-	  gnutls_send (tls, hstart, hlen);
+	  response_send (output, hstart, hlen);
 	}
     }
   else if (reti != REG_NOMATCH)
@@ -321,11 +325,11 @@ clip_domain_from_cookie (tlssession_h tls, const char *hstart, size_t hlen)
       regerror (reti, &regex_onion, msgbuf, sizeof(msgbuf));
       fprintf (stderr, "Regex domain_av request line match failed: %s\n",
 	       msgbuf);
-      gnutls_send (tls, hstart, hlen);
+      response_send (output, hstart, hlen);
     }
   else
     // This is normal, the server didn't send domain-av.
-    gnutls_send (tls, hstart, hlen);
+    response_send (output, hstart, hlen);
 }
 
 static inline void
@@ -345,10 +349,16 @@ process_one_header (http_h h, http_request_t *request, const char *hstart,
 	      h->chunked = true;
 	      // gnutls_send (request->tls, hstart, hlen);
 	    }
+	  else
+	    response_send (&request->output, hstart, hlen);
 	  break;
 	case 10:
 	  if (0 == strncasecmp (hstart, "Set-Cookie", 10))
-	    clip_domain_from_cookie (request->tls, hstart, hlen);
+	    {
+	      clip_domain_from_cookie (&request->output, hstart, hlen);
+	    }
+	  else
+	    response_send (&request->output, hstart, hlen);
 	  break;
 	case 14:
 	  if (0 == strncasecmp (hstart, "ConTent-Length", 14))
@@ -356,11 +366,26 @@ process_one_header (http_h h, http_request_t *request, const char *hstart,
 	      size_t len = 0;
 	      if (1 == sscanf (&hstart[15], "%zu", &len))
 		h->body_length = len;
-	      gnutls_send (request->tls, hstart, hlen);
 	    }
+	  response_send (&request->output, hstart, hlen);
+	  break;
+	case 12:
+	  if (0 == strncasecmp (hstart, "Content-Type", 12))
+	    {
+	      const char *p = &hstart[13];
+	      while (*p == ' ' || *p == '\t')
+		p++;
+	      if (0 != strncasecmp (p, "text/html", 9))
+		goto NOT_HTML;
+	      p += 9;
+	      while (*p == ' ' || *p == '\t' || *p == '\n')
+		p++;
+	      h->is_html = p[-1] == '\n';
+	    }
+	  NOT_HTML: response_send (&request->output, hstart, hlen);
 	  break;
 	default:
-	  gnutls_send (request->tls, hstart, hlen);
+	  response_send (&request->output, hstart, hlen);
 	}
     }
   else
@@ -459,10 +484,11 @@ process_one_chunk (http_h h, http_request_t *request, const char **d, size_t s)
       // TODO: Process headers.
       *d += 2;
       slen = get_sendbuf_size (h->chunked_sendbuf);
-      gnutls_send (
-	  request->tls, buf,
+      response_send (
+	  &request->output, buf,
 	  snprintf (buf, sizeof(buf), "Content-Length: %zu\r\n\r\n", slen));
-      gnutls_send (request->tls, get_sendbuf_buf (h->chunked_sendbuf), slen);
+      response_send (&request->output, get_sendbuf_buf (h->chunked_sendbuf),
+		     slen);
       sendbuf_clear (&h->chunked_sendbuf);
       responce_end (h);
       return pos + 1 + 2;
@@ -515,8 +541,8 @@ process_func (void *c, const void *v, size_t s)
 	  h->have_eoh = true;
 	  // Except for the content length added after un-chunking.
 	  if (!h->chunked)
-	    gnutls_send (request->tls, one_byte ? "\n" : "\r\n",
-			 one_byte ? 1 : 2);
+	    response_send (&request->output, one_byte ? "\n" : "\r\n",
+			   one_byte ? 1 : 2);
 	  d += one_byte ? 1 : 2;
 	  ret += one_byte ? 1 : 2;
 	}
@@ -545,12 +571,12 @@ process_func (void *c, const void *v, size_t s)
       size_t len = s - ret;
       ret += len;
       assert(s == ret);
-      gnutls_send (request->tls, d, len);
+      response_send (&request->output, d, len);
       h->body_length -= len;
     }
   else
     {
-      gnutls_send (request->tls, d, h->body_length);
+      response_send (&request->output, d, h->body_length);
       ret += h->body_length;
       d += h->body_length;
       responce_end (h);
@@ -770,18 +796,18 @@ reinit (http_h h)
 
 #define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 http_h
-http_new (const char *hostname, size_t len, http_request_t request,
-	  const void *b, size_t s)
+http_new (http_request_t request, const void *b, size_t s)
 {
   Vector **services_h_h;
   unsigned char out[10];
   http_h h = NULL;
   request.retrybuf = NULL;
-  if (!base32_decode (out, 10, (const unsigned char*) hostname, 16))
+  if (!base32_decode (out, 10, (const unsigned char*) request.hostname, 16))
     {
       fprintf (stderr, "Couldn't parse hostname\n");
       services_h_h = (Vector **) &hexnode_lookup (
-	  hexnode, MIN(len, 10), (const unsigned char*) hostname,
+	  hexnode, strnlen (request.hostname, 9) + 1,
+	  (const unsigned char*) request.hostname,
 	  true)->data;
     }
   else
@@ -805,7 +831,6 @@ http_new (const char *hostname, size_t len, http_request_t request,
 	  break;
 	}
     }
-  gnutls_a_ctra (request.tls);
   if (NULL != h)
     {
       vector_push_back (&h->request_v, &request);
@@ -817,10 +842,11 @@ http_new (const char *hostname, size_t len, http_request_t request,
     h = malloc (sizeof(http_t));
   *h = (http_t
 	)
-	  { .hostname = NULL, .client_sendbuf = NULL, .out_sendbuf = NULL,
-	      .in_sendbuf = NULL, .chunked_sendbuf = NULL, .socksapi = NULL, .inuse = true};
+	  { .hostname = NULL, .client_sendbuf = NULL, .out_sendbuf =
+	  NULL, .in_sendbuf = NULL, .chunked_sendbuf = NULL, .socksapi =
+	  NULL, .inuse = true, .is_html = false, };
   while (NULL == h->hostname)
-    h->hostname = strndup (hostname, len);
+    h->hostname = strdup (request.hostname);
   while (VECTOR_SUCCESS
       != vector_setup (&h->request_v, 5, sizeof(http_request_t)))
     ;

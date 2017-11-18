@@ -24,7 +24,20 @@
  * @author Mike Mestnik
  */
 
+#include <stdbool.h>
+
+#include "sendbuf.h"
+
 typedef struct tlssession *tlssession_h;
+typedef struct response *response_h;
+
+typedef struct response
+{
+  response_h next;
+  tlssession_h tls;
+  bool eof;
+  sendbuf_h sendbuf;
+} response_t;
 
 #include "sockets.h"
 
@@ -37,12 +50,10 @@ tlssession_start (fd_closure_h, struct sockaddr*, socklen_t);
 void
 gnutls_close (tlssession_h);
 void
-gnutls_send (tlssession_h, const void*, size_t);
-void
-gnutls_a_ctra (tlssession_h);
-void
-gnutls_b_ctra (tlssession_h);
-void
 gnutls_close_on_fin (tlssession_h);
+void
+response_attach (response_h);
+void
+response_send (response_h, const void*, size_t);
 
 #endif

@@ -22,7 +22,6 @@
  */
 
 #include "gnutls.h"
-#include "sendbuf.h"
 #include "conf.h"
 #include "globals.h"
 #include "httpsd.h"
@@ -40,8 +39,8 @@ typedef struct tlssession
   sendbuf_h sendbuf;
   void
   (*can) (tlssession_h);
-  httpsd_h httpsd;
-  int ctra;
+  httpsd_h output;
+  response_h head_of_line;
   bool close_on_fin;
 } tlssession_t;
 
@@ -125,6 +124,7 @@ record_send (tlssession_h h, const void *d, size_t s)
 	}
     }
   h->can = NULL;
+  // TODO: schedule_timer (schedule_event, h->fd_c, &h->fd_c->instanceid, 5);
 }
 
 static void
@@ -134,41 +134,71 @@ can_send (tlssession_h h)
 }
 
 void
-gnutls_send (tlssession_h h, const void *d, size_t s)
+response_attach (response_h h)
 {
-  if (NULL == h)
-    return; // LCOV_EXCL_LINE
-  if (NULL == h->session)
-    return;
-  if (NULL == h->can)
+  if (NULL == h->tls->head_of_line)
     {
-      record_send (h, d, s);
+      h->tls->head_of_line = h;
+      ++h->tls->fd_c->instanceid;
     }
   else
-    sendbuf_append (&h->sendbuf, d, s);
+    {
+      response_h *last;
+      last = &h->tls->head_of_line;
+      while (NULL != *last)
+	last = &(*last)->next;
+      *last = h;
+    }
 }
 
-static void
-_close (tlssession_h h)
+static inline bool
+a (response_h h)
+{
+  const void *d = get_sendbuf_buf (h->sendbuf);
+  size_t s = get_sendbuf_size (h->sendbuf);
+  if (NULL == h->tls->can)
+    {
+      record_send (h->tls, d, s);
+    }
+  else
+    sendbuf_append (&h->tls->sendbuf, d, s);
+  sendbuf_clear (&h->sendbuf);
+  return true;
+}
+
+void
+response_send (response_h h, const void *d, size_t s)
+{
+  tlssession_h tls = h->tls;
+  if (NULL == tls)
+    return;
+  sendbuf_append (&h->sendbuf, d, s);
+  if (tls->head_of_line == h)
+    {
+      while (NULL != h && (a (h) || h->eof))
+	{
+	  tls->head_of_line = h->next;
+	  free (h);
+	  h = tls->head_of_line;
+	}
+    }
+}
+
+void
+gnutls_close (tlssession_h h)
 {
   if (NULL != h->session)
     gnutls_deinit (h->session);
   h->session = NULL;
-  if (NULL != h->httpsd)
-    httpsd_close (h->httpsd);
-  h->httpsd = NULL;
+  if (NULL != h->output)
+    httpsd_close (h->output);
+  h->output = NULL;
   if (NULL != h->sendbuf)
     free (h->sendbuf);
   h->sendbuf = NULL;
   if (NULL != h->fd_c)
     sockets_close (h->fd_c);
   h->fd_c = NULL;
-}
-
-void
-gnutls_close (tlssession_h h)
-{
-  _close (h);
   free (h);
 }
 
@@ -191,7 +221,7 @@ can_read (tlssession_h h)
 	}
       else if (ret == 0)
 	{
-	  0 == h->ctra ? gnutls_close (h) : _close (h);
+	  gnutls_close (h);
 	  return;
 	}
       else if (ret < 0 && gnutls_error_is_fatal (ret) == 0)
@@ -204,7 +234,7 @@ can_read (tlssession_h h)
 	  return;
 	}
       else if (ret > 0)
-	httpsd_in (h->httpsd, in, ret);
+	httpsd_in (h->output, in, ret);
     }
   while (0 < (ret = gnutls_record_check_pending (h->session)));
   h->can = NULL;
@@ -267,9 +297,9 @@ tlssession_start (fd_closure_h fd_c, struct sockaddr *addr, socklen_t alen)
     h = malloc (sizeof(tlssession_t));
   *h = (tlssession_t
 	)
-	  { .session = NULL, .fd_c = fd_c, .sendbuf = NULL, .can = NULL, .ctra =
-	      0, .close_on_fin = false, };
-  h->httpsd = httpsd_new (h, addr, alen);
+	  { .session = NULL, .fd_c = fd_c, .sendbuf = NULL, .can = NULL,
+	      .close_on_fin = false, };
+  h->output = httpsd_new (h, addr, alen);
   int ret;
   ret = gnutls_init (&h->session, GNUTLS_SERVER);
   if (0 > ret)
@@ -291,29 +321,9 @@ tlssession_start (fd_closure_h fd_c, struct sockaddr *addr, socklen_t alen)
 }
 
 void
-gnutls_a_ctra (tlssession_h h)
-{
-  if (0 == h->ctra++ && NULL != h->fd_c)
-    ++h->fd_c->instanceid;
-}
-
-void
-gnutls_b_ctra (tlssession_h h)
-{
-  assert(0 < h->ctra);
-  if (0 == --h->ctra)
-    {
-      if (h->close_on_fin)
-	gnutls_close (h);
-      if (!h->close_on_fin && NULL != h->fd_c)
-	schedule_timer (schedule_event, h->fd_c, &h->fd_c->instanceid, 5);
-    }
-}
-
-void
 gnutls_close_on_fin (tlssession_h h)
 {
   h->close_on_fin = true;
-  if (0 == h->ctra)
+  if (NULL == h->head_of_line && NULL == h->sendbuf)
     gnutls_close (h);
 }
