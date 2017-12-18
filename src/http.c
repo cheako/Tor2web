@@ -590,7 +590,7 @@ process_func (void *c, const void *v, size_t s)
 static void
 send_begin_socks (http_h h)
 {
-  char hostname[22] = "oooooooooooooooo.onion";
+  char hostname[] = "oooooooooooooooo.onion";
   fprintf (stderr, "fullname: \"%s\"\n", h->hostname);
   for (int i = 0; i < 16; i++)
     hostname[i] = h->hostname[i];
