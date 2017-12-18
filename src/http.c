@@ -591,6 +591,7 @@ static void
 send_begin_socks (http_h h)
 {
   char hostname[22] = "oooooooooooooooo.onion";
+  fprintf (stderr, "fullname: \"%s\"\n", h->hostname);
   for (int i = 0; i < 16; i++)
     hostname[i] = h->hostname[i];
   h->have_connect = true;
