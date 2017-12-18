@@ -119,51 +119,6 @@ bool *done)
   size_t ret = 0;
   unsigned short len;
   len = strcspn (*d, "\n");
-  if (NULL == h->http)
-    {
-      unsigned short plen;
-      plen = strcspn (*d, "/");
-      if (s > plen + 20 && (' ' == (*d)[plen - 1] || ':' == (*d)[plen - 1])
-	  && '/' == (*d)[plen++] && '/' == (*d)[plen++])
-	{
-	  int reti;
-	  regmatch_t regmatch;
-	  const char *hstart = *d + plen;
-	  reti = regexec (&regex_onion, hstart, 1, &regmatch, 0);
-	  if (!reti)
-	    {
-	      unsigned short hlen;
-	      hlen = strcspn (hstart, " /");
-	      if (hlen > regmatch.rm_so)
-		{
-		  if (hlen > regmatch.rm_eo)
-		    {
-		      while (NULL == h->request_line_clip)
-			h->request_line_clip = malloc (
-			    sizeof(*h->request_line_clip));
-		      h->request_line_clip->begin = regmatch.rm_eo + plen;
-		      h->request_line_clip->end = hlen + plen;
-		    }
-		  while (NULL == h->http_request.hostname)
-		    h->http_request.hostname =
-			strndup (
-			    hstart + regmatch.rm_so,
-			    strspn (
-				hstart + regmatch.rm_so,
-				"qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM1234567890._-"));
-		}
-	    }
-	  else if (reti != REG_NOMATCH)
-	    {
-	      char msgbuf[100];
-	      // LCOV_EXCL_START
-	      regerror (reti, &regex_onion, msgbuf, sizeof(msgbuf));
-	      fprintf (stderr, "Regex onion request line match failed: %s\n",
-		       msgbuf);
-	      // LCOV_EXCL_STOP
-	    }
-	}
-    }
   if ('\n' == (*d)[len++])
     {
       bool one_byte;
@@ -273,17 +228,21 @@ process_func (void *c, const void *v, size_t s)
 		{
 		  int reti;
 		  regmatch_t regmatch;
-		  const char *dstart = hstart + klen + 1;
+		  const char *dstart = hstart + 5;
 		  reti = regexec (&regex_onion, dstart, 1, &regmatch, 0);
 		  if (!reti)
 		    {
-		      if (hlen - klen - 1 > regmatch.rm_so)
+		      if (hlen - 5 > regmatch.rm_so)
 			{
 			  bool one_byte;
-			  write_http (h, hstart, klen + 1 + regmatch.rm_eo);
+			  write_http (h, hstart, 5 + regmatch.rm_eo);
 			  one_byte = '\r' == hstart[hlen - 2];
 			  write_http (h, !one_byte ? "\n" : "\r\n",
 				      !one_byte ? 1 : 2);
+			  if(NULL != h->http_request.hostname) {
+			      free(h->http_request.hostname);
+			      h->http_request.hostname = NULL;
+			  }
 			  while (NULL == h->http_request.hostname)
 			    h->http_request.hostname =
 				strndup (
@@ -306,7 +265,9 @@ process_func (void *c, const void *v, size_t s)
 		    }
 		  else
 		    {
-		      fprintf (stderr, "Regex onion header no match\n");
+		      fprintf (stderr,
+			       "Regex onion header no match: \"%.*s\"\n",
+			       hlen - 5, hstart + 5);
 		      write_http (h, hstart, hlen);
 		    }
 		}

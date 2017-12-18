@@ -7,7 +7,7 @@ RUN apt-get -yq update && \
             build-essential automake autoconf-archive libgnutls28-dev \
             libio-socket-socks-perl libproc-daemon-perl libipc-run-perl \
             libcommon-sense-perl libhttp-daemon-perl libio-socket-ssl-perl \
-            strace ltrace valgrind doxygen curl git && \
+            strace ltrace valgrind doxygen curl git sharutils && \
     curl --remote-name \
   http://ftp.us.debian.org/debian/pool/main/l/lcov/lcov_1.11-3_all.deb && \
     dpkg -i lcov_1.11-3_all.deb && \

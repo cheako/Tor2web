@@ -590,12 +590,15 @@ process_func (void *c, const void *v, size_t s)
 static void
 send_begin_socks (http_h h)
 {
+  char hostname[22] = "oooooooooooooooo.onion";
+  for (int i = 0; i < 16; i++)
+    hostname[i] = h->hostname[i];
   h->have_connect = true;
   int i = begin_socks4_relay (h->socksapi, "", "", &(struct sockaddr_in
 	)
 	  { .sin_addr =
 	    { .s_addr = 0 } },
-			      h->hostname, 80);
+			      hostname, 80);
   switch (i)
     {
     case 0:
@@ -846,7 +849,7 @@ http_new (http_request_t request, const void *b, size_t s)
 	  NULL, .in_sendbuf = NULL, .chunked_sendbuf = NULL, .socksapi =
 	  NULL, .inuse = true, .is_html = false, };
   while (NULL == h->hostname)
-    h->hostname = strdup (request.hostname);
+    h->hostname = strndup (request.hostname, 22);
   while (VECTOR_SUCCESS
       != vector_setup (&h->request_v, 5, sizeof(http_request_t)))
     ;

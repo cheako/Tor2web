@@ -24,7 +24,7 @@ SUBDIRS = src data/templates
 
 NOCAREFUNC=stat,close,brk,mprotect,mmap,getuid,geteuid,getgid,getegid,fstat,lseek,ioctl,rt_sigprocmask,rt_sigaction
 check:
-	head --lines=-0 --verbose /dev/null $(sort $(wildcard data/templates/*.html))
+	head --lines=-0 --verbose /dev/null $(sort $(wildcard data/templates/*.html)) | xz | uuencode --base64 templates.txt.xz
 #	head --lines=-0 --verbose /dev/null $(sort $(wildcard t/*.t.log t/tx/*.t.log t/test-suite.log t/tx/test-suite.log))
 	for ech in t/tx/*.t; do echo $$ech .; perl $$ech; done || true
 #	prove -v -f t/tx || true
