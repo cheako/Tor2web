@@ -239,10 +239,22 @@ process_func (void *c, const void *v, size_t s)
 			  one_byte = '\r' == hstart[hlen - 2];
 			  write_http (h, !one_byte ? "\n" : "\r\n",
 				      !one_byte ? 1 : 2);
-			  if(NULL != h->http_request.hostname) {
-			      free(h->http_request.hostname);
+			  if (NULL != h->http_request.hostname)
+			    {
+			      free (h->http_request.hostname);
 			      h->http_request.hostname = NULL;
-			  }
+			    }
+			  fprintf (
+			      stderr,
+			      "rm_so: %d \"%.*s\"\n",
+			      strspn (
+				  dstart + regmatch.rm_so,
+				  "qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM1234567890._-"),
+			      strspn (
+				  dstart + regmatch.rm_so,
+				  "qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM1234567890._-")
+				  + 2,
+			      dstart + regmatch.rm_so);
 			  while (NULL == h->http_request.hostname)
 			    h->http_request.hostname =
 				strndup (
